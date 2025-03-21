@@ -4,20 +4,6 @@ const axios = require('axios');
 module.exports = {
   name: 'openpack',
   execute: async (message, args) => {
-    const set = args[0];
-    const validSets = [
-      'base1', 'base2', 'base3', 'base4', 'base5', // Base Sets
-      'xy1', 'xy2', 'xy3', 'xy4', 'xy5', // XY Series
-      'sm1', 'sm2', 'sm3', 'sm4', 'sm5', // Sun & Moon Series
-      'swsh1', 'swsh2', 'swsh3', 'swsh4', 'swsh5', // Sword & Shield Series
-      'swsh6', 'swsh7', 'swsh8', 'swsh9', 'swsh10', // Sword & Shield Series (continued)
-      'swsh11', 'swsh12', 'swsh13' // Sword & Shield Series (continued)
-    ];
-
-    if (!validSets.includes(set)) {
-      return message.reply('Invalid set. Choose from: base1, base2, xy1, sm1, swsh1, etc.');
-    }
-
     const user = await db.query('SELECT * FROM users WHERE id = $1', [message.author.id]);
     if (!user.rows.length) {
       await db.query('INSERT INTO users (id, username) VALUES ($1, $2)', [message.author.id, message.author.username]);
@@ -38,33 +24,28 @@ module.exports = {
     }
 
     try {
-      console.log('Fetching cards from the API...');
-      const response = await axios.get(`https://api.pokemontcg.io/v2/cards?q=set.name:${set}`, {
-        headers: {
-          'X-Api-Key': '20b788cc-9c77-4a82-b6b0-973fdbddb752', // Add your API key here
-        },
-      });
+      console.log('Fetching Pokémon from PokeAPI...');
+      const randomPokemonId = Math.floor(Math.random() * 898) + 1; // Random Pokémon ID (1 to 898)
+      const response = await axios.get(`https://pokeapi.co/api/v2/pokemon/${randomPokemonId}`);
 
       console.log('API Response:', response.data);
 
-      const cards = response.data.data;
-      if (!cards || cards.length === 0) {
-        return message.reply('No cards found for this set.');
-      }
+      const pokemon = response.data;
+      const pokemonName = pokemon.name;
+      const pokemonImage = pokemon.sprites.front_default;
+      const pokemonTypes = pokemon.types.map(type => type.type.name).join(', ');
 
-      const randomCards = cards.sort(() => 0.5 - Math.random()).slice(0, 5);
-      console.log('Random Cards:', randomCards);
+      // Save Pokémon to the database
+      await db.query(
+        'INSERT INTO pokemon (id, name, image_url, types) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING',
+        [pokemon.id, pokemonName, pokemonImage, pokemonTypes]
+      );
 
-      for (const card of randomCards) {
-        await db.query(
-          'INSERT INTO cards (id, name, image_url, hp, rarity, set_name) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO NOTHING',
-          [card.id, card.name, card.images.large, card.hp, card.rarity, set]
-        );
-        await db.query(
-          'INSERT INTO user_cards (user_id, card_id) VALUES ($1, $2)',
-          [message.author.id, card.id]
-        );
-      }
+      // Link Pokémon to the user
+      await db.query(
+        'INSERT INTO user_pokemon (user_id, pokemon_id) VALUES ($1, $2)',
+        [message.author.id, pokemon.id]
+      );
 
       // Only update stamina for non-exception users
       if (!hasUnlimitedStamina) {
@@ -74,11 +55,10 @@ module.exports = {
         );
       }
 
-      const cardList = randomCards.map(card => `${card.name} (${card.rarity})\n${card.images.large}`).join('\n\n');
-      message.reply(`You opened a pack! Here are your cards:\n${cardList}`);
+      message.reply(`You opened a pack! Here’s your Pokémon:\n**${pokemonName}** (${pokemonTypes})\n${pokemonImage}`);
     } catch (error) {
-      console.error('Error fetching cards:', error);
-      message.reply('Failed to fetch cards. Please try again later.');
+      console.error('Error fetching Pokémon:', error);
+      message.reply('Failed to fetch Pokémon. Please try again later.');
     }
   },
 };
