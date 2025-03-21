@@ -1,6 +1,5 @@
-const db = require('./db');
+const db = require('./db'); // Ensure correct database connection
 
-// Initialize the database
 const initDatabase = async () => {
   await db.query(`
     CREATE TABLE IF NOT EXISTS users (
