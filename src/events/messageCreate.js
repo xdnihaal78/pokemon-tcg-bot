@@ -1,5 +1,4 @@
 const { prefix } = require('../config.json');
-const db = require('../db/db');
 
 module.exports = {
   name: 'messageCreate',
