@@ -19,7 +19,7 @@ module.exports = {
 
     const { pack_stamina, last_pack_time } = user.rows[0];
     const currentTime = Date.now();
-    const PACK_COOLDOWN = 11 * 60 * 60 * 1000; // 11 hours
+    const PACK_COOLDOWN = 0; // 11 hours
 
     if (pack_stamina <= 0 && currentTime - last_pack_time < PACK_COOLDOWN) {
       return message.reply(`You're out of stamina! Wait ${Math.ceil((PACK_COOLDOWN - (currentTime - last_pack_time)) / (1000 * 60 * 60))} hours.`);
