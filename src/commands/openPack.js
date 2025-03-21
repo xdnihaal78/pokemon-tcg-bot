@@ -5,10 +5,17 @@ module.exports = {
   name: 'openpack',
   execute: async (message, args) => {
     const set = args[0];
-    const validSets = ['mythical-island', 'triumphant-light', 'space-time-smackdown'];
+    const validSets = [
+      'base1', 'base2', 'base3', 'base4', 'base5', // Base Sets
+      'xy1', 'xy2', 'xy3', 'xy4', 'xy5', // XY Series
+      'sm1', 'sm2', 'sm3', 'sm4', 'sm5', // Sun & Moon Series
+      'swsh1', 'swsh2', 'swsh3', 'swsh4', 'swsh5', // Sword & Shield Series
+      'swsh6', 'swsh7', 'swsh8', 'swsh9', 'swsh10', // Sword & Shield Series (continued)
+      'swsh11', 'swsh12', 'swsh13' // Sword & Shield Series (continued)
+    ];
 
     if (!validSets.includes(set)) {
-      return message.reply('Invalid set. Choose from: mythical-island, triumphant-light, space-time-smackdown.');
+      return message.reply('Invalid set. Choose from: base1, base2, xy1, sm1, swsh1, etc.');
     }
 
     const user = await db.query('SELECT * FROM users WHERE id = $1', [message.author.id]);
@@ -31,11 +38,14 @@ module.exports = {
     }
 
     try {
+      console.log('Fetching cards from the API...');
       const response = await axios.get(`https://api.pokemontcg.io/v2/cards?q=set.name:${set}`, {
         headers: {
           'X-Api-Key': '20b788cc-9c77-4a82-b6b0-973fdbddb752', // Add your API key here
         },
       });
+
+      console.log('API Response:', response.data);
 
       const cards = response.data.data;
       if (!cards || cards.length === 0) {
@@ -43,6 +53,7 @@ module.exports = {
       }
 
       const randomCards = cards.sort(() => 0.5 - Math.random()).slice(0, 5);
+      console.log('Random Cards:', randomCards);
 
       for (const card of randomCards) {
         await db.query(
