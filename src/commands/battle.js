@@ -1,6 +1,6 @@
 const db = require('../db/db');
 const axios = require('axios');
-const { MessageEmbed } = require('discord.js');
+const { EmbedBuilder } = require('discord.js'); // Use EmbedBuilder
 
 module.exports = {
   name: 'battle',
@@ -43,22 +43,24 @@ module.exports = {
     const userWins = userTotalStats > targetTotalStats;
 
     // Create an embed for the battle result
-    const embed = new MessageEmbed()
+    const embed = new EmbedBuilder() // Use EmbedBuilder
       .setTitle('Pokémon Battle')
       .setDescription(`${message.author.username} vs ${targetUser.username}`)
-      .addField(
-        `${message.author.username}'s Pokémon`,
-        `**${userPokemonData.name}** (${userPokemonData.types})\nTotal Stats: ${userTotalStats}`,
-        true
-      )
-      .addField(
-        `${targetUser.username}'s Pokémon`,
-        `**${targetPokemonData.name}** (${targetPokemonData.types})\nTotal Stats: ${targetTotalStats}`,
-        true
+      .addFields(
+        {
+          name: `${message.author.username}'s Pokémon`,
+          value: `**${userPokemonData.name}** (${userPokemonData.types})\nTotal Stats: ${userTotalStats}`,
+          inline: true,
+        },
+        {
+          name: `${targetUser.username}'s Pokémon`,
+          value: `**${targetPokemonData.name}** (${targetPokemonData.types})\nTotal Stats: ${targetTotalStats}`,
+          inline: true,
+        }
       )
       .setThumbnail(userPokemonData.image_url)
       .setColor(userWins ? '#00FF00' : '#FF0000')
-      .setFooter(userWins ? 'You won the battle!' : 'You lost the battle!');
+      .setFooter({ text: userWins ? 'You won the battle!' : 'You lost the battle!' });
 
     message.reply({ embeds: [embed] });
   },

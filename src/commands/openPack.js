@@ -1,6 +1,6 @@
 const db = require('../db/db');
 const axios = require('axios');
-const { MessageEmbed } = require('discord.js');
+const { EmbedBuilder } = require('discord.js'); // Use EmbedBuilder
 
 module.exports = {
   name: 'openpack',
@@ -86,25 +86,26 @@ module.exports = {
       }
 
       // Create an embed for the pack opening result
-      const embed = new MessageEmbed()
+      const embed = new EmbedBuilder() // Use EmbedBuilder
         .setTitle('Pack Opening')
         .setDescription(`You opened a pack! Here are your 6 Pokémon:`)
         .setColor('#00FF00');
 
       // Add each Pokémon to the embed
       pokemonList.forEach((pokemon, index) => {
-        embed.addField(
-          `Pokémon ${index + 1}: ${pokemon.name}`,
-          `**Types:** ${pokemon.types}\n` +
-          `**HP:** ${pokemon.stats.hp}\n` +
-          `**Attack:** ${pokemon.stats.attack}\n` +
-          `**Defense:** ${pokemon.stats.defense}\n` +
-          `**Special Attack:** ${pokemon.stats.specialAttack}\n` +
-          `**Special Defense:** ${pokemon.stats.specialDefense}\n` +
-          `**Speed:** ${pokemon.stats.speed}\n` +
-          `[Image](${pokemon.image})`,
-          true
-        );
+        embed.addFields({
+          name: `Pokémon ${index + 1}: ${pokemon.name}`,
+          value:
+            `**Types:** ${pokemon.types}\n` +
+            `**HP:** ${pokemon.stats.hp}\n` +
+            `**Attack:** ${pokemon.stats.attack}\n` +
+            `**Defense:** ${pokemon.stats.defense}\n` +
+            `**Special Attack:** ${pokemon.stats.specialAttack}\n` +
+            `**Special Defense:** ${pokemon.stats.specialDefense}\n` +
+            `**Speed:** ${pokemon.stats.speed}\n` +
+            `[Image](${pokemon.image})`,
+          inline: true,
+        });
       });
 
       // Add a thumbnail (use the first Pokémon's image)
