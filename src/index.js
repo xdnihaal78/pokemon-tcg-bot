@@ -1,5 +1,5 @@
-const { Client, GatewayIntentBits } = require('discord.js');
-const { initDatabase } = require('./db/models');
+const { Client, GatewayIntentBits, IntentsBitField } = require('discord.js');
+const { initDatabase } = require('./models');
 require('dotenv').config();
 
 const client = new Client({
@@ -7,12 +7,13 @@ const client = new Client({
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
+    IntentsBitField.Flags.DirectMessages, // Added for DMs
   ],
 });
 
 // Load commands
 client.commands = new Map();
-const commandFiles = ['openPack', 'battle', 'profile', 'leaderboard', 'pokemon', 'trade', 'help', 'missions', 'wonderpick']; // Add 'missions' and 'wonderpick' here
+const commandFiles = ['openPack', 'battle', 'profile', 'leaderboard', 'pokemon', 'trade', 'help', 'missions', 'wonderpick'];
 for (const file of commandFiles) {
   const command = require(`./commands/${file}`);
   client.commands.set(command.name, command);
@@ -31,7 +32,7 @@ for (const file of eventFiles) {
 
 // Event: Bot is ready
 client.once('ready', async () => {
-  console.log(`Logged in as ${client.user.tag}!`);
+  console.log(`🚀 Logged in as ${client.user.tag}!`);
   await initDatabase();
 });
 

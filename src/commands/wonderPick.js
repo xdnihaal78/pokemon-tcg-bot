@@ -1,39 +1,75 @@
-const db = require('../db/db');
-const { EmbedBuilder } = require('discord.js');
+import { createClient } from '@supabase/supabase-js';
+import { EmbedBuilder } from 'discord.js';
+import 'dotenv/config';
 
-module.exports = {
+// Initialize Supabase
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+
+export default {
   name: 'wonderpick',
-  execute: async (message, args) => {
-    const targetUser = message.mentions.users.first();
-    if (!targetUser) return message.reply('Mention a user to pick a Pokémon from!');
+  description: 'Trade a Pokémon for a random one!',
+  async execute(message, args) {
+    try {
+      if (args.length < 1) {
+        return message.reply('Usage: `!wonderpick YourPokemon`');
+      }
 
-    // Get a random Pokémon from the target user's collection
-    const targetPokemon = await db.query(
-      'SELECT pokemon.id, pokemon.name, pokemon.image_url, pokemon.types FROM pokemon ' +
-      'JOIN user_pokemon ON pokemon.id = user_pokemon.pokemon_id ' +
-      'WHERE user_pokemon.user_id = $1 ORDER BY RANDOM() LIMIT 1',
-      [targetUser.id]
-    );
+      const userId = message.author.id;
+      const userPokemonName = args[0];
 
-    if (!targetPokemon.rows.length) {
-      return message.reply(`${targetUser.username} has no Pokémon to pick from!`);
+      // Validate user's Pokémon ownership
+      const { data: userPokemon, error: userError } = await supabase
+        .from('user_pokemon')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('card_name', userPokemonName)
+        .single();
+
+      if (!userPokemon) {
+        return message.reply(`You don't own a Pokémon named **${userPokemonName}**.`);
+      }
+
+      // Fetch a random Pokémon from another user
+      const { data: randomPokemon, error: randomError } = await supabase
+        .from('user_pokemon')
+        .select('*')
+        .neq('user_id', userId)
+        .limit(1)
+        .order('RANDOM()')
+        .single();
+
+      if (!randomPokemon) {
+        return message.reply('No available Pokémon for Wonder Trade at the moment.');
+      }
+
+      // Perform the trade (swap ownership)
+      const { error: tradeError1 } = await supabase
+        .from('user_pokemon')
+        .update({ user_id: randomPokemon.user_id })
+        .eq('id', userPokemon.id);
+
+      const { error: tradeError2 } = await supabase
+        .from('user_pokemon')
+        .update({ user_id: userId })
+        .eq('id', randomPokemon.id);
+
+      if (tradeError1 || tradeError2) {
+        console.error(tradeError1, tradeError2);
+        return message.reply('An error occurred while processing the Wonder Trade.');
+      }
+
+      // Confirm trade success
+      const embed = new EmbedBuilder()
+        .setColor(0x3498db)
+        .setTitle('Wonder Trade Successful!')
+        .setDescription(`${message.author.username} traded **${userPokemonName}** and received **${randomPokemon.card_name}**!`)
+        .setFooter({ text: 'Enjoy your new Pokémon!' });
+
+      message.channel.send({ embeds: [embed] });
+
+    } catch (error) {
+      console.error(error);
+      message.reply('An unexpected error occurred while processing the Wonder Trade.');
     }
-
-    const pokemon = targetPokemon.rows[0];
-
-    // Transfer the Pokémon to the current user
-    await db.query(
-      'UPDATE user_pokemon SET user_id = $1 WHERE pokemon_id = $2',
-      [message.author.id, pokemon.id]
-    );
-
-    // Create an embed for the wonder pick result
-    const embed = new EmbedBuilder()
-      .setTitle('Wonder Pick')
-      .setColor('#00FF00')
-      .setDescription(`You picked **${pokemon.name}** (${pokemon.types}) from ${targetUser.username}'s collection!`)
-      .setThumbnail(pokemon.image_url);
-
-    message.reply({ embeds: [embed] });
-  },
+  }
 };

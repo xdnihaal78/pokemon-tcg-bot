@@ -1,34 +1,24 @@
-const { EmbedBuilder } = require('discord.js');
+import { EmbedBuilder } from 'discord.js';
 
-module.exports = {
+export default {
   name: 'help',
-  execute: async (message) => {
-    // List of commands and their descriptions
-    const commands = [
-      { name: '!openpack', description: 'Open a pack of 6 random Pokémon.' },
-      { name: '!battle @user', description: 'Battle another user with your Pokémon.' },
-      { name: '!profile', description: 'View your profile (XP, level, and Pokémon collection).' },
-      { name: '!leaderboard', description: 'View the top 10 users by level and XP.' },
-      { name: '!pokemon <name>', description: 'View details about a specific Pokémon in your collection.' },
-      { name: '!trade @user <your-pokemon> <their-pokemon>', description: 'Trade Pokémon with another user.' },
-      { name: '!help', description: 'Display this help message.' },
-    ];
+  description: 'Displays a list of available commands and their descriptions.',
+  execute(message, args, client) {
+    try {
+      const embed = new EmbedBuilder()
+        .setColor(0x0099ff)
+        .setTitle('📜 Available Commands')
+        .setDescription('Here is a list of commands you can use:')
+        .setFooter({ text: `Requested by ${message.author.username}`, iconURL: message.author.displayAvatarURL() });
 
-    // Create an embed for the help message
-    const embed = new EmbedBuilder()
-      .setTitle('Bot Commands')
-      .setColor('#00FF00')
-      .setDescription('Here are all the commands you can use:')
-      .addFields(
-        commands.map(command => ({
-          name: command.name,
-          value: command.description,
-          inline: false,
-        }))
-      )
-      .setFooter({ text: 'Use the commands wisely!' })
-      .setTimestamp();
+      client.commands.forEach((cmd) => {
+        embed.addFields({ name: `\`${cmd.name}\``, value: cmd.description || 'No description provided.', inline: false });
+      });
 
-    message.reply({ embeds: [embed] });
-  },
+      message.channel.send({ embeds: [embed] });
+    } catch (error) {
+      console.error(error);
+      message.reply('An error occurred while fetching the help menu.');
+    }
+  }
 };

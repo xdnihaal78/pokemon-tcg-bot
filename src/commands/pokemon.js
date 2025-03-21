@@ -1,41 +1,70 @@
-const db = require('../db/db');
-const { EmbedBuilder } = require('discord.js');
+import { createClient } from '@supabase/supabase-js';
+import { EmbedBuilder } from 'discord.js';
+import fetch from 'node-fetch';
+import 'dotenv/config';
 
-module.exports = {
+// Initialize Supabase
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+
+export default {
   name: 'pokemon',
-  execute: async (message, args) => {
-    const pokemonName = args.join(' ');
-    if (!pokemonName) return message.reply('Please specify a Pokémon name.');
+  description: 'Fetches Pokémon details from your collection or the Pokémon TCG API.',
+  async execute(message, args) {
+    try {
+      if (!args.length) {
+        return message.reply('Please provide a Pokémon name or card ID!');
+      }
 
-    // Fetch the Pokémon from the user's collection
-    const pokemon = await db.query(
-      'SELECT pokemon.* FROM pokemon ' +
-      'JOIN user_pokemon ON pokemon.id = user_pokemon.pokemon_id ' +
-      'WHERE user_pokemon.user_id = $1 AND pokemon.name = $2',
-      [message.author.id, pokemonName]
-    );
+      const query = args.join(' '); // Pokémon name or ID
+      const userId = message.author.id;
 
-    if (!pokemon.rows.length) {
-      return message.reply(`You don't have a Pokémon named **${pokemonName}** in your collection.`);
+      // First, check if the Pokémon exists in the user's collection
+      const { data: userPokemon, error: userPokemonError } = await supabase
+        .from('user_pokemon')
+        .select('*')
+        .eq('user_id', userId)
+        .ilike('card_name', `%${query}%`)
+        .limit(1);
+
+      if (userPokemonError) {
+        console.error(userPokemonError);
+        return message.reply('Error fetching Pokémon from your collection.');
+      }
+
+      let pokemonCard;
+      if (userPokemon.length) {
+        // Found in user collection
+        pokemonCard = userPokemon[0];
+      } else {
+        // Fetch from Pokémon TCG API
+        const response = await fetch(`https://api.pokemontcg.io/v2/cards?q=name:${query}`, {
+          headers: { 'X-Api-Key': process.env.POKEMON_TCG_API_KEY }
+        });
+
+        const { data } = await response.json();
+        if (!data || !data.length) {
+          return message.reply('No Pokémon found with that name or ID.');
+        }
+
+        pokemonCard = data[0]; // Get the first matching card
+      }
+
+      // Create an embed to display Pokémon details
+      const embed = new EmbedBuilder()
+        .setColor(0x3498db)
+        .setTitle(pokemonCard.card_name || pokemonCard.name)
+        .setImage(pokemonCard.image_url || pokemonCard.images.small)
+        .addFields(
+          { name: 'Rarity', value: pokemonCard.rarity || 'Unknown', inline: true },
+          { name: 'Set', value: pokemonCard.set?.name || 'Unknown', inline: true }
+        )
+        .setFooter({ text: `Requested by ${message.author.username}`, iconURL: message.author.displayAvatarURL() });
+
+      message.channel.send({ embeds: [embed] });
+
+    } catch (error) {
+      console.error(error);
+      message.reply('An error occurred while fetching Pokémon details.');
     }
-
-    const pokemonData = pokemon.rows[0];
-
-    // Create an embed for the Pokémon details
-    const embed = new EmbedBuilder()
-      .setTitle(pokemonData.name)
-      .setColor('#00FF00')
-      .addFields(
-        { name: 'Types', value: pokemonData.types, inline: true },
-        { name: 'HP', value: pokemonData.hp.toString(), inline: true },
-        { name: 'Attack', value: pokemonData.attack.toString(), inline: true },
-        { name: 'Defense', value: pokemonData.defense.toString(), inline: true },
-        { name: 'Special Attack', value: pokemonData.special_attack.toString(), inline: true },
-        { name: 'Special Defense', value: pokemonData.special_defense.toString(), inline: true },
-        { name: 'Speed', value: pokemonData.speed.toString(), inline: true }
-      )
-      .setThumbnail(pokemonData.image_url);
-
-    message.reply({ embeds: [embed] });
-  },
+  }
 };

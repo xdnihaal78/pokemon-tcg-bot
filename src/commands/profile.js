@@ -1,35 +1,61 @@
-const db = require('../db/db');
-const { EmbedBuilder } = require('discord.js');
+import { createClient } from '@supabase/supabase-js';
+import { EmbedBuilder } from 'discord.js';
+import 'dotenv/config';
 
-module.exports = {
+// Initialize Supabase
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+
+export default {
   name: 'profile',
-  execute: async (message) => {
-    const user = await db.query('SELECT * FROM users WHERE id = $1', [message.author.id]);
-    if (!user.rows.length) {
-      return message.reply('You are not registered! Use `!openpack` to register.');
+  description: 'Displays your Pokémon Trainer profile.',
+  async execute(message) {
+    try {
+      const userId = message.author.id;
+
+      // Fetch user details
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (userError && userError.code !== 'PGRST116') {
+        console.error(userError);
+        return message.reply('Error fetching your profile.');
+      }
+
+      if (!userData) {
+        return message.reply("You don't have a profile yet! Use `!start` to create one.");
+      }
+
+      // Fetch Pokémon count
+      const { count: pokemonCount, error: pokemonError } = await supabase
+        .from('user_pokemon')
+        .select('*', { count: 'exact' })
+        .eq('user_id', userId);
+
+      if (pokemonError) {
+        console.error(pokemonError);
+        return message.reply('Error fetching your Pokémon collection.');
+      }
+
+      // Create an embed for the profile
+      const embed = new EmbedBuilder()
+        .setColor(0xffcc00)
+        .setTitle(`${message.author.username}'s Trainer Profile`)
+        .setThumbnail(message.author.displayAvatarURL())
+        .addFields(
+          { name: 'Trainer Name', value: userData.username, inline: true },
+          { name: 'Pokémon Collected', value: `${pokemonCount || 0}`, inline: true },
+          { name: 'XP', value: `${userData.xp}`, inline: true }
+        )
+        .setFooter({ text: 'Train hard and catch them all!', iconURL: message.author.displayAvatarURL() });
+
+      message.channel.send({ embeds: [embed] });
+
+    } catch (error) {
+      console.error(error);
+      message.reply('An unexpected error occurred while fetching your profile.');
     }
-
-    const { username, xp, level } = user.rows[0];
-
-    // Fetch the user's Pokémon collection
-    const pokemonCollection = await db.query(
-      'SELECT pokemon.name, pokemon.image_url FROM pokemon ' +
-      'JOIN user_pokemon ON pokemon.id = user_pokemon.pokemon_id ' +
-      'WHERE user_pokemon.user_id = $1',
-      [message.author.id]
-    );
-
-    // Create an embed for the profile
-    const embed = new EmbedBuilder()
-      .setTitle(`${username}'s Profile`)
-      .setColor('#00FF00')
-      .addFields(
-        { name: 'Level', value: level.toString(), inline: true },
-        { name: 'XP', value: `${xp}/${level * 100}`, inline: true },
-        { name: 'Pokémon Collection', value: pokemonCollection.rows.map(p => p.name).join(', ') || 'None', inline: false }
-      )
-      .setThumbnail(message.author.displayAvatarURL());
-
-    message.reply({ embeds: [embed] });
-  },
+  }
 };

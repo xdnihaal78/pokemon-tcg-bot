@@ -1,6 +1,8 @@
-const db = require('../db/db');
 const axios = require('axios');
-const { EmbedBuilder } = require('discord.js'); // Use EmbedBuilder
+const { EmbedBuilder } = require('discord.js');
+
+const POKEMON_API = 'https://api.pokemontcg.io/v2/cards';
+const API_KEY = '65ca0d52-f978-42c5-94dd-03a64293d8e5';
 
 module.exports = {
   name: 'battle',
@@ -8,60 +10,43 @@ module.exports = {
     const targetUser = message.mentions.users.first();
     if (!targetUser) return message.reply('Mention a user to battle!');
 
-    // Get a random Pokémon from the current user's collection
-    const userPokemon = await db.query(
-      'SELECT pokemon.id, pokemon.name, pokemon.image_url, pokemon.types FROM pokemon ' +
-      'JOIN user_pokemon ON pokemon.id = user_pokemon.pokemon_id ' +
-      'WHERE user_pokemon.user_id = $1 ORDER BY RANDOM() LIMIT 1',
-      [message.author.id]
-    );
+    try {
+      // Fetch two random Pokémon cards
+      const userPokemon = await fetchRandomPokemon();
+      const targetPokemon = await fetchRandomPokemon();
 
-    // Get a random Pokémon from the target user's collection
-    const targetPokemon = await db.query(
-      'SELECT pokemon.id, pokemon.name, pokemon.image_url, pokemon.types FROM pokemon ' +
-      'JOIN user_pokemon ON pokemon.id = user_pokemon.pokemon_id ' +
-      'WHERE user_pokemon.user_id = $1 ORDER BY RANDOM() LIMIT 1',
-      [targetUser.id]
-    );
+      // Calculate battle outcome
+      const winner = determineWinner(userPokemon, targetPokemon);
 
-    if (!userPokemon.rows.length || !targetPokemon.rows.length) {
-      return message.reply('Not enough Pokémon to battle!');
+      // Battle Embed
+      const battleEmbed = new EmbedBuilder()
+        .setTitle(`🔥 Pokémon Battle: ${message.author.username} vs ${targetUser.username} 🔥`)
+        .setDescription(`${userPokemon.name} vs ${targetPokemon.name}`)
+        .setImage(userPokemon.image)
+        .setFooter({ text: `Winner: ${winner}` });
+
+      message.channel.send({ embeds: [battleEmbed] });
+    } catch (error) {
+      console.error(error);
+      message.reply('Error fetching Pokémon data!');
     }
-
-    const userPokemonData = userPokemon.rows[0];
-    const targetPokemonData = targetPokemon.rows[0];
-
-    // Fetch detailed stats for both Pokémon from PokeAPI
-    const userPokemonStats = await axios.get(`https://pokeapi.co/api/v2/pokemon/${userPokemonData.id}`);
-    const targetPokemonStats = await axios.get(`https://pokeapi.co/api/v2/pokemon/${targetPokemonData.id}`);
-
-    // Calculate total stats for both Pokémon
-    const userTotalStats = userPokemonStats.data.stats.reduce((sum, stat) => sum + stat.base_stat, 0);
-    const targetTotalStats = targetPokemonStats.data.stats.reduce((sum, stat) => sum + stat.base_stat, 0);
-
-    // Determine the winner
-    const userWins = userTotalStats > targetTotalStats;
-
-    // Create an embed for the battle result
-    const embed = new EmbedBuilder() // Use EmbedBuilder
-      .setTitle('Pokémon Battle')
-      .setDescription(`${message.author.username} vs ${targetUser.username}`)
-      .addFields(
-        {
-          name: `${message.author.username}'s Pokémon`,
-          value: `**${userPokemonData.name}** (${userPokemonData.types})\nTotal Stats: ${userTotalStats}`,
-          inline: true,
-        },
-        {
-          name: `${targetUser.username}'s Pokémon`,
-          value: `**${targetPokemonData.name}** (${targetPokemonData.types})\nTotal Stats: ${targetTotalStats}`,
-          inline: true,
-        }
-      )
-      .setThumbnail(userPokemonData.image_url)
-      .setColor(userWins ? '#00FF00' : '#FF0000')
-      .setFooter({ text: userWins ? 'You won the battle!' : 'You lost the battle!' });
-
-    message.reply({ embeds: [embed] });
-  },
+  }
 };
+
+async function fetchRandomPokemon() {
+  const response = await axios.get(POKEMON_API, {
+    headers: { 'X-Api-Key': API_KEY },
+    params: { pageSize: 1, page: Math.floor(Math.random() * 1000) },
+  });
+  const card = response.data.data[0];
+  return {
+    name: card.name,
+    image: card.images.large,
+    hp: parseInt(card.hp) || 50,
+    attack: Math.floor(Math.random() * 50) + 10,
+  };
+}
+
+function determineWinner(pokemon1, pokemon2) {
+  return pokemon1.attack > pokemon2.attack ? pokemon1.name : pokemon2.name;
+}

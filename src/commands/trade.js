@@ -1,53 +1,84 @@
-const db = require('../db/db');
-const { EmbedBuilder } = require('discord.js');
+import { createClient } from '@supabase/supabase-js';
+import { EmbedBuilder } from 'discord.js';
+import 'dotenv/config';
 
-module.exports = {
+// Initialize Supabase
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+
+export default {
   name: 'trade',
-  execute: async (message, args) => {
-    const targetUser = message.mentions.users.first();
-    if (!targetUser) return message.reply('Mention a user to trade with!');
+  description: 'Trade Pokémon with another trainer.',
+  async execute(message, args) {
+    try {
+      if (args.length < 3) {
+        return message.reply('Usage: `!trade @user YourPokemon TheirPokemon`');
+      }
 
-    const [userPokemonName, targetPokemonName] = args.slice(1);
-    if (!userPokemonName || !targetPokemonName) {
-      return message.reply('Usage: `!trade @user <your-pokemon> <their-pokemon>`');
+      const mentionedUser = message.mentions.users.first();
+      if (!mentionedUser) {
+        return message.reply('You must mention a user to trade with.');
+      }
+
+      const senderId = message.author.id;
+      const receiverId = mentionedUser.id;
+      const senderPokemon = args[1];
+      const receiverPokemon = args[2];
+
+      // Validate sender's Pokémon ownership
+      const { data: senderPokemonData, error: senderError } = await supabase
+        .from('user_pokemon')
+        .select('*')
+        .eq('user_id', senderId)
+        .eq('card_name', senderPokemon)
+        .single();
+
+      if (!senderPokemonData) {
+        return message.reply(`You don't own a Pokémon named **${senderPokemon}**.`);
+      }
+
+      // Validate receiver's Pokémon ownership
+      const { data: receiverPokemonData, error: receiverError } = await supabase
+        .from('user_pokemon')
+        .select('*')
+        .eq('user_id', receiverId)
+        .eq('card_name', receiverPokemon)
+        .single();
+
+      if (!receiverPokemonData) {
+        return message.reply(`${mentionedUser.username} doesn't own a Pokémon named **${receiverPokemon}**.`);
+      }
+
+      // Perform the trade (update ownership)
+      const { error: tradeError } = await supabase
+        .from('user_pokemon')
+        .update({ user_id: receiverId })
+        .eq('id', senderPokemonData.id);
+
+      const { error: tradeError2 } = await supabase
+        .from('user_pokemon')
+        .update({ user_id: senderId })
+        .eq('id', receiverPokemonData.id);
+
+      if (tradeError || tradeError2) {
+        console.error(tradeError, tradeError2);
+        return message.reply('An error occurred while processing the trade.');
+      }
+
+      // Confirm trade success
+      const embed = new EmbedBuilder()
+        .setColor(0x1abc9c)
+        .setTitle('Pokémon Trade Successful!')
+        .addFields(
+          { name: `${message.author.username} Traded`, value: senderPokemon, inline: true },
+          { name: `${mentionedUser.username} Traded`, value: receiverPokemon, inline: true }
+        )
+        .setFooter({ text: 'Trade completed successfully!' });
+
+      message.channel.send({ embeds: [embed] });
+
+    } catch (error) {
+      console.error(error);
+      message.reply('An unexpected error occurred while processing the trade.');
     }
-
-    // Fetch the user's Pokémon
-    const userPokemon = await db.query(
-      'SELECT pokemon.id FROM pokemon ' +
-      'JOIN user_pokemon ON pokemon.id = user_pokemon.pokemon_id ' +
-      'WHERE user_pokemon.user_id = $1 AND pokemon.name = $2',
-      [message.author.id, userPokemonName]
-    );
-
-    // Fetch the target user's Pokémon
-    const targetPokemon = await db.query(
-      'SELECT pokemon.id FROM pokemon ' +
-      'JOIN user_pokemon ON pokemon.id = user_pokemon.pokemon_id ' +
-      'WHERE user_pokemon.user_id = $1 AND pokemon.name = $2',
-      [targetUser.id, targetPokemonName]
-    );
-
-    if (!userPokemon.rows.length || !targetPokemon.rows.length) {
-      return message.reply('One or both Pokémon were not found in the users\' collections.');
-    }
-
-    // Swap Pokémon
-    await db.query(
-      'UPDATE user_pokemon SET user_id = $1 WHERE pokemon_id = $2',
-      [targetUser.id, userPokemon.rows[0].id]
-    );
-    await db.query(
-      'UPDATE user_pokemon SET user_id = $1 WHERE pokemon_id = $2',
-      [message.author.id, targetPokemon.rows[0].id]
-    );
-
-    // Create an embed for the trade result
-    const embed = new EmbedBuilder()
-      .setTitle('Trade Successful')
-      .setColor('#00FF00')
-      .setDescription(`${message.author.username} traded **${userPokemonName}** for ${targetUser.username}'s **${targetPokemonName}**.`);
-
-    message.reply({ embeds: [embed] });
-  },
+  }
 };
