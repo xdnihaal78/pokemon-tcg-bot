@@ -1,4 +1,6 @@
 const db = require('../db/db');
+const axios = require('axios');
+const { MessageEmbed } = require('discord.js');
 
 module.exports = {
   name: 'battle',
@@ -29,13 +31,35 @@ module.exports = {
     const userPokemonData = userPokemon.rows[0];
     const targetPokemonData = targetPokemon.rows[0];
 
-    // Simple battle logic: Compare Pokémon IDs (higher ID wins)
-    const userWins = userPokemonData.id > targetPokemonData.id;
+    // Fetch detailed stats for both Pokémon from PokeAPI
+    const userPokemonStats = await axios.get(`https://pokeapi.co/api/v2/pokemon/${userPokemonData.id}`);
+    const targetPokemonStats = await axios.get(`https://pokeapi.co/api/v2/pokemon/${targetPokemonData.id}`);
 
-    const resultMessage = userWins
-      ? `You won the battle with **${userPokemonData.name}** (${userPokemonData.types}) vs **${targetPokemonData.name}** (${targetPokemonData.types})!`
-      : `You lost the battle with **${userPokemonData.name}** (${userPokemonData.types}) vs **${targetPokemonData.name}** (${targetPokemonData.types})!`;
+    // Calculate total stats for both Pokémon
+    const userTotalStats = userPokemonStats.data.stats.reduce((sum, stat) => sum + stat.base_stat, 0);
+    const targetTotalStats = targetPokemonStats.data.stats.reduce((sum, stat) => sum + stat.base_stat, 0);
 
-    message.reply(resultMessage);
+    // Determine the winner
+    const userWins = userTotalStats > targetTotalStats;
+
+    // Create an embed for the battle result
+    const embed = new MessageEmbed()
+      .setTitle('Pokémon Battle')
+      .setDescription(`${message.author.username} vs ${targetUser.username}`)
+      .addField(
+        `${message.author.username}'s Pokémon`,
+        `**${userPokemonData.name}** (${userPokemonData.types})\nTotal Stats: ${userTotalStats}`,
+        true
+      )
+      .addField(
+        `${targetUser.username}'s Pokémon`,
+        `**${targetPokemonData.name}** (${targetPokemonData.types})\nTotal Stats: ${targetTotalStats}`,
+        true
+      )
+      .setThumbnail(userPokemonData.image_url)
+      .setColor(userWins ? '#00FF00' : '#FF0000')
+      .setFooter(userWins ? 'You won the battle!' : 'You lost the battle!');
+
+    message.reply({ embeds: [embed] });
   },
 };

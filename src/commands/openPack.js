@@ -1,5 +1,6 @@
 const db = require('../db/db');
 const axios = require('axios');
+const { MessageEmbed } = require('discord.js');
 
 module.exports = {
   name: 'openpack',
@@ -25,27 +26,56 @@ module.exports = {
 
     try {
       console.log('Fetching Pokémon from PokeAPI...');
-      const randomPokemonId = Math.floor(Math.random() * 898) + 1; // Random Pokémon ID (1 to 898)
-      const response = await axios.get(`https://pokeapi.co/api/v2/pokemon/${randomPokemonId}`);
 
-      console.log('API Response:', response.data);
+      // Fetch 6 random Pokémon
+      const pokemonList = [];
+      for (let i = 0; i < 6; i++) {
+        const randomPokemonId = Math.floor(Math.random() * 898) + 1; // Random Pokémon ID (1 to 898)
+        const response = await axios.get(`https://pokeapi.co/api/v2/pokemon/${randomPokemonId}`);
+        const pokemon = response.data;
 
-      const pokemon = response.data;
-      const pokemonName = pokemon.name;
-      const pokemonImage = pokemon.sprites.front_default;
-      const pokemonTypes = pokemon.types.map(type => type.type.name).join(', ');
+        // Extract stats
+        const stats = {
+          hp: pokemon.stats.find(stat => stat.stat.name === 'hp').base_stat,
+          attack: pokemon.stats.find(stat => stat.stat.name === 'attack').base_stat,
+          defense: pokemon.stats.find(stat => stat.stat.name === 'defense').base_stat,
+          specialAttack: pokemon.stats.find(stat => stat.stat.name === 'special-attack').base_stat,
+          specialDefense: pokemon.stats.find(stat => stat.stat.name === 'special-defense').base_stat,
+          speed: pokemon.stats.find(stat => stat.stat.name === 'speed').base_stat,
+        };
 
-      // Save Pokémon to the database
-      await db.query(
-        'INSERT INTO pokemon (id, name, image_url, types) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO NOTHING',
-        [pokemon.id, pokemonName, pokemonImage, pokemonTypes]
-      );
+        pokemonList.push({
+          id: pokemon.id,
+          name: pokemon.name,
+          image: pokemon.sprites.front_default,
+          types: pokemon.types.map(type => type.type.name).join(', '),
+          stats: stats,
+        });
 
-      // Link Pokémon to the user
-      await db.query(
-        'INSERT INTO user_pokemon (user_id, pokemon_id) VALUES ($1, $2)',
-        [message.author.id, pokemon.id]
-      );
+        // Save Pokémon to the database
+        await db.query(
+          'INSERT INTO pokemon (id, name, image_url, types, hp, attack, defense, special_attack, special_defense, speed) ' +
+          'VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (id) DO NOTHING',
+          [
+            pokemon.id,
+            pokemon.name,
+            pokemon.sprites.front_default,
+            pokemon.types.map(type => type.type.name).join(', '),
+            stats.hp,
+            stats.attack,
+            stats.defense,
+            stats.specialAttack,
+            stats.specialDefense,
+            stats.speed,
+          ]
+        );
+
+        // Link Pokémon to the user
+        await db.query(
+          'INSERT INTO user_pokemon (user_id, pokemon_id) VALUES ($1, $2)',
+          [message.author.id, pokemon.id]
+        );
+      }
 
       // Only update stamina for non-exception users
       if (!hasUnlimitedStamina) {
@@ -55,7 +85,32 @@ module.exports = {
         );
       }
 
-      message.reply(`You opened a pack! Here’s your Pokémon:\n**${pokemonName}** (${pokemonTypes})\n${pokemonImage}`);
+      // Create an embed for the pack opening result
+      const embed = new MessageEmbed()
+        .setTitle('Pack Opening')
+        .setDescription(`You opened a pack! Here are your 6 Pokémon:`)
+        .setColor('#00FF00');
+
+      // Add each Pokémon to the embed
+      pokemonList.forEach((pokemon, index) => {
+        embed.addField(
+          `Pokémon ${index + 1}: ${pokemon.name}`,
+          `**Types:** ${pokemon.types}\n` +
+          `**HP:** ${pokemon.stats.hp}\n` +
+          `**Attack:** ${pokemon.stats.attack}\n` +
+          `**Defense:** ${pokemon.stats.defense}\n` +
+          `**Special Attack:** ${pokemon.stats.specialAttack}\n` +
+          `**Special Defense:** ${pokemon.stats.specialDefense}\n` +
+          `**Speed:** ${pokemon.stats.speed}\n` +
+          `[Image](${pokemon.image})`,
+          true
+        );
+      });
+
+      // Add a thumbnail (use the first Pokémon's image)
+      embed.setThumbnail(pokemonList[0].image);
+
+      message.reply({ embeds: [embed] });
     } catch (error) {
       console.error('Error fetching Pokémon:', error);
       message.reply('Failed to fetch Pokémon. Please try again later.');
