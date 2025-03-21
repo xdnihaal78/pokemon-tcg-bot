@@ -12,7 +12,7 @@ const client = new Client({
 
 // Load commands
 client.commands = new Map();
-const commandFiles = ['openPack']; // Add other commands if needed
+const commandFiles = ['openPack', 'battle']; // Add other commands if needed
 for (const file of commandFiles) {
   const command = require(`./commands/${file}`);
   client.commands.set(command.name, command);

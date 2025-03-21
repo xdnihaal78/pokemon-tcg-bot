@@ -6,25 +6,36 @@ module.exports = {
     const targetUser = message.mentions.users.first();
     if (!targetUser) return message.reply('Mention a user to battle!');
 
-    const userCard = await db.query(
-      'SELECT * FROM user_cards WHERE user_id = $1 ORDER BY RANDOM() LIMIT 1',
+    // Get a random Pokémon from the current user's collection
+    const userPokemon = await db.query(
+      'SELECT pokemon.id, pokemon.name, pokemon.image_url, pokemon.types FROM pokemon ' +
+      'JOIN user_pokemon ON pokemon.id = user_pokemon.pokemon_id ' +
+      'WHERE user_pokemon.user_id = $1 ORDER BY RANDOM() LIMIT 1',
       [message.author.id]
     );
 
-    const targetCard = await db.query(
-      'SELECT * FROM user_cards WHERE user_id = $1 ORDER BY RANDOM() LIMIT 1',
+    // Get a random Pokémon from the target user's collection
+    const targetPokemon = await db.query(
+      'SELECT pokemon.id, pokemon.name, pokemon.image_url, pokemon.types FROM pokemon ' +
+      'JOIN user_pokemon ON pokemon.id = user_pokemon.pokemon_id ' +
+      'WHERE user_pokemon.user_id = $1 ORDER BY RANDOM() LIMIT 1',
       [targetUser.id]
     );
 
-    if (!userCard.rows.length || !targetCard.rows.length) return message.reply('Not enough cards to battle!');
-
-    const userHP = userCard.rows[0].hp;
-    const targetHP = targetCard.rows[0].hp;
-
-    if (userHP > targetHP) {
-      message.reply(`You won the battle with ${userCard.rows[0].name} (${userHP} HP) vs ${targetCard.rows[0].name} (${targetHP} HP)!`);
-    } else {
-      message.reply(`You lost the battle with ${userCard.rows[0].name} (${userHP} HP) vs ${targetCard.rows[0].name} (${targetHP} HP)!`);
+    if (!userPokemon.rows.length || !targetPokemon.rows.length) {
+      return message.reply('Not enough Pokémon to battle!');
     }
+
+    const userPokemonData = userPokemon.rows[0];
+    const targetPokemonData = targetPokemon.rows[0];
+
+    // Simple battle logic: Compare Pokémon IDs (higher ID wins)
+    const userWins = userPokemonData.id > targetPokemonData.id;
+
+    const resultMessage = userWins
+      ? `You won the battle with **${userPokemonData.name}** (${userPokemonData.types}) vs **${targetPokemonData.name}** (${targetPokemonData.types})!`
+      : `You lost the battle with **${userPokemonData.name}** (${userPokemonData.types}) vs **${targetPokemonData.name}** (${targetPokemonData.types})!`;
+
+    message.reply(resultMessage);
   },
 };
