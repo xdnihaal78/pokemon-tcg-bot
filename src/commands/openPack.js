@@ -19,9 +19,14 @@ module.exports = {
 
     const { pack_stamina, last_pack_time } = user.rows[0];
     const currentTime = Date.now();
-    const PACK_COOLDOWN = 0; // 11 hours
+    const PACK_COOLDOWN = 11 * 60 * 60 * 1000; // 11 hours
 
-    if (pack_stamina <= 0 && currentTime - last_pack_time < PACK_COOLDOWN) {
+    // Check if the user is one of the exceptions
+    const unlimitedStaminaUsers = ['437162069217771520', '920475167921156106'];
+    const hasUnlimitedStamina = unlimitedStaminaUsers.includes(message.author.id);
+
+    // Skip stamina check for unlimited stamina users
+    if (!hasUnlimitedStamina && pack_stamina <= 0 && currentTime - last_pack_time < PACK_COOLDOWN) {
       return message.reply(`You're out of stamina! Wait ${Math.ceil((PACK_COOLDOWN - (currentTime - last_pack_time)) / (1000 * 60 * 60))} hours.`);
     }
 
@@ -33,6 +38,10 @@ module.exports = {
       });
 
       const cards = response.data.data;
+      if (!cards || cards.length === 0) {
+        return message.reply('No cards found for this set.');
+      }
+
       const randomCards = cards.sort(() => 0.5 - Math.random()).slice(0, 5);
 
       for (const card of randomCards) {
@@ -46,10 +55,13 @@ module.exports = {
         );
       }
 
-      await db.query(
-        'UPDATE users SET pack_stamina = pack_stamina - 1, last_pack_time = $1 WHERE id = $2',
-        [currentTime, message.author.id]
-      );
+      // Only update stamina for non-exception users
+      if (!hasUnlimitedStamina) {
+        await db.query(
+          'UPDATE users SET pack_stamina = pack_stamina - 1, last_pack_time = $1 WHERE id = $2',
+          [currentTime, message.author.id]
+        );
+      }
 
       const cardList = randomCards.map(card => `${card.name} (${card.rarity})\n${card.images.large}`).join('\n\n');
       message.reply(`You opened a pack! Here are your cards:\n${cardList}`);
