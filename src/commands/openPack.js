@@ -25,27 +25,37 @@ module.exports = {
       return message.reply(`You're out of stamina! Wait ${Math.ceil((PACK_COOLDOWN - (currentTime - last_pack_time)) / (1000 * 60 * 60))} hours.`);
     }
 
-    const response = await axios.get(`https://api.pokemontcg.io/v2/cards?q=set.name:${set}`);
-    const cards = response.data.data;
-    const randomCards = cards.sort(() => 0.5 - Math.random()).slice(0, 5);
+    try {
+      const response = await axios.get(`https://api.pokemontcg.io/v2/cards?q=set.name:${set}`, {
+        headers: {
+          'X-Api-Key': '20b788cc-9c77-4a82-b6b0-973fdbddb752', // Add your API key here
+        },
+      });
 
-    for (const card of randomCards) {
+      const cards = response.data.data;
+      const randomCards = cards.sort(() => 0.5 - Math.random()).slice(0, 5);
+
+      for (const card of randomCards) {
+        await db.query(
+          'INSERT INTO cards (id, name, image_url, hp, rarity, set_name) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO NOTHING',
+          [card.id, card.name, card.images.large, card.hp, card.rarity, set]
+        );
+        await db.query(
+          'INSERT INTO user_cards (user_id, card_id) VALUES ($1, $2)',
+          [message.author.id, card.id]
+        );
+      }
+
       await db.query(
-        'INSERT INTO cards (id, name, image_url, hp, rarity, set_name) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (id) DO NOTHING',
-        [card.id, card.name, card.images.large, card.hp, card.rarity, set]
+        'UPDATE users SET pack_stamina = pack_stamina - 1, last_pack_time = $1 WHERE id = $2',
+        [currentTime, message.author.id]
       );
-      await db.query(
-        'INSERT INTO user_cards (user_id, card_id) VALUES ($1, $2)',
-        [message.author.id, card.id]
-      );
+
+      const cardList = randomCards.map(card => `${card.name} (${card.rarity})\n${card.images.large}`).join('\n\n');
+      message.reply(`You opened a pack! Here are your cards:\n${cardList}`);
+    } catch (error) {
+      console.error('Error fetching cards:', error);
+      message.reply('Failed to fetch cards. Please try again later.');
     }
-
-    await db.query(
-      'UPDATE users SET pack_stamina = pack_stamina - 1, last_pack_time = $1 WHERE id = $2',
-      [currentTime, message.author.id]
-    );
-
-    const cardList = randomCards.map(card => `${card.name} (${card.rarity})`).join('\n');
-    message.reply(`You opened a pack! Here are your cards:\n${cardList}`);
   },
 };
